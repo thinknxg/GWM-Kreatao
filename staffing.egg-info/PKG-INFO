@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: staffing
+Version: 0.0.1
+Summary: Staffing
+Author: jan
+Author-email: janlloydangeles@gmail.com
+Dynamic: author
+Dynamic: author-email
+Dynamic: summary

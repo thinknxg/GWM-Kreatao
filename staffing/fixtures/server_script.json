@@ -1,0 +1,40 @@
+[
+ {
+  "allow_guest": 0,
+  "api_method": null,
+  "cron_format": null,
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Server Script",
+  "doctype_event": "Before Save",
+  "enable_rate_limit": 0,
+  "event_frequency": "All",
+  "modified": "2026-05-30 14:10:35.052429",
+  "module": null,
+  "name": "Project Milestone Validations",
+  "rate_limit_count": 5,
+  "rate_limit_seconds": 86400,
+  "reference_doctype": "Project",
+  "script": "total_percent = 0.0\ntotal_allocated_amount = 0.0\ntotal_billed = 0.0\n\nfor milestone in doc.get(\"custom_project_milestones\", []):\n    if not milestone.planned_date:\n        frappe.throw(f\"Planned Date is mandatory for milestone '{milestone.milestone_name}'\")\n    total_percent += frappe.utils.flt(milestone.percentage)\n    total_allocated_amount += frappe.utils.flt(milestone.amount)\n    if milestone.status == \"Invoiced\":\n        total_billed += frappe.utils.flt(milestone.amount)\n\nif total_percent > 100:\n    frappe.throw(\"Total milestones percentage cannot exceed 100%. Currently at \" + str(total_percent) + \"%\")\n\nif frappe.utils.flt(doc.custom_total_contract_value) > 0 and total_allocated_amount > frappe.utils.flt(doc.custom_total_contract_value):\n    frappe.throw(\"Milestones total amount (\" + str(total_allocated_amount) + \") cannot exceed Total Contract Value (\" + str(doc.custom_total_contract_value) + \")\")\n\nif total_percent < 100 and len(doc.get(\"custom_project_milestones\", [])) > 0:\n    frappe.msgprint(\"Warning: Milestones only cover \" + str(total_percent) + \"% of the contract. Add more milestones to cover the full 100%.\", indicator=\"orange\", alert=1)\n\ndoc.total_billed_amount = total_billed\n",
+  "script_type": "DocType Event"
+ },
+ {
+  "allow_guest": 0,
+  "api_method": null,
+  "cron_format": null,
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Server Script",
+  "doctype_event": "After Save",
+  "enable_rate_limit": 0,
+  "event_frequency": "All",
+  "modified": "2026-05-30 17:16:29.479386",
+  "module": null,
+  "name": "Project Milestone Auto Invoice",
+  "rate_limit_count": 5,
+  "rate_limit_seconds": 86400,
+  "reference_doctype": "Project",
+  "script": "for milestone in doc.get(\"custom_project_milestones\", []):\n    if milestone.status == \"Approved\" and not milestone.sales_order:\n        so = frappe.new_doc(\"Sales Order\")\n        so.customer = doc.customer\n        so.company = doc.company\n        so.project = doc.name\n        so.custom_is_proforma_invoice = 1\n        so.delivery_date = milestone.planned_date or frappe.utils.today()\n\n        # Get items from quotation\n        if doc.custom_quotation:\n            quotation = frappe.get_doc(\"Quotation\", doc.custom_quotation)\n            for item in quotation.items:\n                item_doc = frappe.get_doc(\"Item\", item.item_code)\n                warehouse = None\n                if item_doc.is_stock_item:\n                    warehouse = frappe.db.get_value(\"Item Default\",\n                        {\"parent\": item.item_code, \"company\": doc.company},\n                        \"default_warehouse\") or \"Stores - SD\"\n                    actual_qty = frappe.db.get_value(\"Bin\",\n                        {\"item_code\": item.item_code, \"warehouse\": warehouse},\n                        \"actual_qty\") or 0\n                    if actual_qty <= 0:\n                        frappe.msgprint(\n                            f\"Item {item.item_code} is out of stock. Skipping.\",\n                            indicator=\"red\", title=\"Out of Stock\"\n                        )\n                        continue\n                so.append(\"items\", {\n                    \"item_code\": item.item_code,\n                    \"item_name\": item.item_name,\n                    \"qty\": item.qty,\n                    \"rate\": item.rate,\n                    \"delivery_date\": milestone.planned_date or frappe.utils.today(),\n                    \"warehouse\": warehouse\n                })\n        else:\n            so.append(\"items\", {\n                \"item_code\": \"CONSULTING_SVC_MILESTONE\",\n                \"item_name\": milestone.milestone_name,\n                \"qty\": 1,\n                \"rate\": milestone.amount,\n                \"delivery_date\": milestone.planned_date or frappe.utils.today()\n            })\n\n        so.insert(ignore_permissions=True)\n        so.submit()\n        frappe.db.set_value(\"Project Milestone\", milestone.name, \"sales_order\", so.name)\n\n    if milestone.status == \"Invoiced\" and not milestone.invoice_created and milestone.sales_order:\n        planned_date = frappe.db.get_value(\"Project Milestone\", milestone.name, \"planned_date\") or frappe.utils.today()\n        si = frappe.new_doc(\"Sales Invoice\")\n        si.customer = doc.customer\n        si.company = doc.company\n        si.project = doc.name\n        si.posting_date = planned_date\n        si.set_posting_time = 1\n\n        if doc.custom_quotation:\n            quotation = frappe.get_doc(\"Quotation\", doc.custom_quotation)\n            for item in quotation.items:\n                si.append(\"items\", {\n                    \"item_code\": item.item_code,\n                    \"item_name\": item.item_name,\n                    \"qty\": item.qty,\n                    \"rate\": item.rate\n                })\n        else:\n            si.append(\"items\", {\n                \"item_code\": \"CONSULTING_SVC_MILESTONE\",\n                \"item_name\": milestone.milestone_name,\n                \"qty\": 1,\n                \"rate\": milestone.amount\n            })\n\n        si.insert(ignore_permissions=True)\n        si.submit()\n        frappe.db.set_value(\"Project Milestone\", milestone.name, {\n            \"sales_invoice\": si.name,\n            \"invoice_created\": 1\n        })\n",
+  "script_type": "DocType Event"
+ }
+]
