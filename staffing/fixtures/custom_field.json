@@ -2661,6 +2661,7 @@
   "insert_after": "is_subcontracted",
   "label": "Is Proforma Invoice",
   "module": null,
-  "name": "Sales Order-custom_is_proforma_invoice"
+  "name": "Sales Order-custom_is_proforma_invoice",
+  "doctype": "Custom Field"
  }
 ]
