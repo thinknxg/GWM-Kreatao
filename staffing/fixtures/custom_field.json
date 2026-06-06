@@ -2653,15 +2653,5 @@
   "translatable": 0,
   "unique": 0,
   "width": null
- },
- {
-  "dt": "Sales Order",
-  "fieldname": "custom_is_proforma_invoice",
-  "fieldtype": "Check",
-  "insert_after": "is_subcontracted",
-  "label": "Is Proforma Invoice",
-  "module": null,
-  "name": "Sales Order-custom_is_proforma_invoice",
-  "doctype": "Custom Field"
  }
 ]
